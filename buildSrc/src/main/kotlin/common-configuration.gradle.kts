@@ -147,7 +147,9 @@ fun Project.configureKotlinCompilationOptions() {
             // Probably it's related to kotlin-test module usage
             ":kotlin-gradle-statistics",
             // Requires serialization plugin
-            ":wasm:wasm.ir"
+            ":wasm:wasm.ir",
+            // Requires serialization plugin
+            ":js:js.tests",
         )
 
         // TODO: fix remaining warnings and remove this property.
