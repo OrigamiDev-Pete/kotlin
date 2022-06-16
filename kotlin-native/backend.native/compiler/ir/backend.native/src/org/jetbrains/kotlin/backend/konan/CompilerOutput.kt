@@ -79,8 +79,17 @@ private fun linkAllDependencies(context: Context, generatedBitcodeFiles: List<St
     val config = context.config
 
     val objcRuntimeModule = listOfNotNull(patchObjCRuntimeModule(context))
+    val runtimeNativeLibraries = context.config.runtimeNativeLibraries
+            .takeIf { context.producedLlvmModuleContainsStdlib }.orEmpty()
+    val runtimeLlvmModules = runtimeNativeLibraries.map {
+        val parsedModule = parseBitcodeFile(it)
+        if (!context.shouldUseDebugInfoFromNativeLibs()) {
+            LLVMStripModuleDebugInfo(parsedModule)
+        }
+        parsedModule
+    } + context.generateRuntimeConstantsModule() + objcRuntimeModule
     // TODO: Possibly slow, maybe to a separate phase?
-    val runtimeModules = RuntimeLinkageStrategy.pick(context).run() + objcRuntimeModule
+    val optimizedRuntimeModules = RuntimeLinkageStrategy.pick(context, runtimeLlvmModules).run()
 
     val launcherNativeLibraries = config.launcherNativeLibraries
             .takeIf { config.produce == CompilerOutputKind.PROGRAM }.orEmpty()
@@ -98,7 +107,7 @@ private fun linkAllDependencies(context: Context, generatedBitcodeFiles: List<St
             exceptionsSupportNativeLibrary
 
     val llvmModule = context.llvmModule!!
-    runtimeModules.forEach {
+    optimizedRuntimeModules.forEach {
         val failed = llvmLinkModules2(context, llvmModule, it)
         if (failed != 0) {
             error("Failed to link ${it.getName()}")

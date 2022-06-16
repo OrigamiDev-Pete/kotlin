@@ -72,21 +72,10 @@ internal sealed class RuntimeLinkageStrategy {
         /**
          * Choose runtime linkage strategy based on current compiler configuration and [BinaryOptions.linkRuntime].
          */
-        internal fun pick(context: Context): RuntimeLinkageStrategy {
+        internal fun pick(context: Context, runtimeLlvmModules: List<LLVMModuleRef>): RuntimeLinkageStrategy {
             val binaryOption = context.config.configuration.get(BinaryOptions.linkRuntime)
-            val runtimeNativeLibraries = context.config.runtimeNativeLibraries
-                    .takeIf { context.producedLlvmModuleContainsStdlib }
-            val runtimeLlvmModules = runtimeNativeLibraries?.map {
-                val parsedModule = parseBitcodeFile(it)
-                if (!context.shouldUseDebugInfoFromNativeLibs()) {
-                    LLVMStripModuleDebugInfo(parsedModule)
-                }
-                parsedModule
-            }?.let {
-              it + context.generateRuntimeConstantsModule()
-            }
             return when {
-                runtimeLlvmModules == null -> return None
+                runtimeLlvmModules.isEmpty() -> return None
                 binaryOption == RuntimeLinkageStrategyBinaryOption.Raw -> Raw(runtimeLlvmModules)
                 binaryOption == RuntimeLinkageStrategyBinaryOption.Optimize -> LinkAndOptimize(context, runtimeLlvmModules)
                 context.config.debug -> LinkAndOptimize(context, runtimeLlvmModules)
