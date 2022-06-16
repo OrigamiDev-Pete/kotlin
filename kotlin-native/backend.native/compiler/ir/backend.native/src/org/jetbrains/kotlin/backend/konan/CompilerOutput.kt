@@ -14,7 +14,7 @@ import org.jetbrains.kotlin.backend.common.phaser.BeforeOrAfter
 import org.jetbrains.kotlin.backend.common.serialization.KlibIrVersion
 import org.jetbrains.kotlin.backend.common.serialization.metadata.KlibMetadataVersion
 import org.jetbrains.kotlin.backend.konan.llvm.*
-import org.jetbrains.kotlin.backend.konan.llvm.objc.linkObjC
+import org.jetbrains.kotlin.backend.konan.llvm.objc.patchObjCRuntimeModule
 import org.jetbrains.kotlin.ir.declarations.IrModuleFragment
 import org.jetbrains.kotlin.konan.CURRENT
 import org.jetbrains.kotlin.konan.CompilerVersion
@@ -78,22 +78,24 @@ internal fun produceCStubs(context: Context) {
 private fun linkAllDependencies(context: Context, generatedBitcodeFiles: List<String>) {
     val config = context.config
 
+    val objcRuntimeModule = listOfNotNull(patchObjCRuntimeModule(context))
     // TODO: Possibly slow, maybe to a separate phase?
-    val runtimeModules = RuntimeLinkageStrategy.pick(context).run()
+    val runtimeModules = RuntimeLinkageStrategy.pick(context).run() + objcRuntimeModule
 
     val launcherNativeLibraries = config.launcherNativeLibraries
             .takeIf { config.produce == CompilerOutputKind.PROGRAM }.orEmpty()
-
-    linkObjC(context)
 
     val nativeLibraries = config.nativeLibraries + launcherNativeLibraries
 
     val bitcodeLibraries = context.llvm.bitcodeToLink.map { it.bitcodePaths }.flatten().filter { it.isBitcode }
     val additionalBitcodeFilesToLink = context.llvm.additionalProducedBitcodeFiles
-    val exceptionsSupportNativeLibrary = config.exceptionsSupportNativeLibrary
-    val bitcodeFiles = (nativeLibraries + generatedBitcodeFiles + additionalBitcodeFilesToLink + bitcodeLibraries).toMutableSet()
-    if (config.produce == CompilerOutputKind.DYNAMIC_CACHE)
-        bitcodeFiles += exceptionsSupportNativeLibrary
+    val exceptionsSupportNativeLibrary = listOf(config.exceptionsSupportNativeLibrary)
+            .takeIf { config.produce == CompilerOutputKind.DYNAMIC_CACHE }.orEmpty()
+    val bitcodeFiles = nativeLibraries +
+            generatedBitcodeFiles +
+            additionalBitcodeFilesToLink +
+            bitcodeLibraries +
+            exceptionsSupportNativeLibrary
 
     val llvmModule = context.llvmModule!!
     runtimeModules.forEach {
