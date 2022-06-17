@@ -3,16 +3,27 @@ declare namespace JS_TESTS {
     const __doNotImplementIt: unique symbol
     type __doNotImplementIt = typeof __doNotImplementIt
     namespace foo {
+        type NonExportedInterface = { __thePropertyDoesntExist: unique symbol }
+        type NonExportedGenericInterface<T> = { __thePropertyDoesntExist: unique symbol }
+        type NonExportedType = { __thePropertyDoesntExist: unique symbol }
+        type NonExportedGenericType<T> = { __thePropertyDoesntExist: unique symbol }
+        type NotExportedChildClass = { __thePropertyDoesntExist: unique symbol } & NonExportedInterface & NonExportedType
+        type NotExportedChildGenericClass<T> = { __thePropertyDoesntExist: unique symbol } & NonExportedInterface & NonExportedGenericInterface<T> & NonExportedGenericType<T>
+
         interface ExportedInterface {
             readonly __doNotUseIt: __doNotImplementIt;
         }
-        function producer(value: number): any/* foo.NonExportedType */;
-        function consumer(value: any/* foo.NonExportedType */): number;
+        function producer(value: number): foo.NonExportedType;
+        function consumer(value: foo.NonExportedType): number;
+        function childProducer(value: number): foo.NotExportedChildClass;
+        function childConsumer(value: foo.NotExportedChildClass): number;
+        function genericChildProducer<T extends NonExportedGenericType<number>>(value: number): foo.NotExportedChildGenericClass<T>;
+        function genericChildConsumer<T extends NonExportedGenericType<number>>(value: foo.NotExportedChildGenericClass<T>): number;
         class A {
-            constructor(value: any/* foo.NonExportedType */);
-            get value(): any/* foo.NonExportedType */;
-            set value(value: any/* foo.NonExportedType */);
-            increment<T>(t: T): any/* foo.NonExportedType */;
+            constructor(value: foo.NonExportedType);
+            get value(): foo.NonExportedType;
+            set value(value: foo.NonExportedType);
+            increment<T>(t: T): foo.NonExportedType;
         }
         class B /* extends foo.NonExportedType */ {
             constructor(v: number);
@@ -41,7 +52,5 @@ declare namespace JS_TESTS {
         function bar(): Error;
         const console: Console;
         const error: WebAssembly.CompileError;
-
-        function functionWithTypeAliasInside(x: any/* foo.NonExportedGenericInterface<foo.NonExportedType> */): any/* foo.NonExportedGenericInterface<foo.NonExportedType> */;
     }
 }

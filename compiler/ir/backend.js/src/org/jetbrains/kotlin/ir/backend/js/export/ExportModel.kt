@@ -62,6 +62,11 @@ class ExportedProperty(
     val exportedObject: ExportedClass? = null,
 ) : ExportedDeclaration()
 
+class ExportedTypeAlias(
+    val name: String,
+    val value: ExportedType,
+    val typeParameters: List<ExportedType.TypeParameter> = emptyList(),
+) : ExportedDeclaration()
 
 // TODO: Cover all cases with frontend and disable error declarations
 class ErrorDeclaration(val message: String) : ExportedDeclaration()
@@ -98,6 +103,7 @@ sealed class ExportedType {
         object Any : Primitive("any")
         object Unit : Primitive("void")
         object Nothing : Primitive("never")
+        object UniqueSymbol : Primitive("unique symbol")
     }
 
     sealed class LiteralType<T : Any>(val value: T) : ExportedType() {

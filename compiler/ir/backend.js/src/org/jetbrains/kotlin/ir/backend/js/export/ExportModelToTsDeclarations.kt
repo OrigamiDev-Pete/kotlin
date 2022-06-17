@@ -62,6 +62,15 @@ fun ExportedDeclaration.toTypeScript(indent: String, prefix: String = ""): Strin
         is ExportedNamespace ->
             "${prefix}namespace $name {\n" + declarations.toTypeScript("$indent    ") + "$indent}"
 
+        is ExportedTypeAlias -> {
+            val renderedTypeParameters =
+                if (typeParameters.isNotEmpty())
+                    "<" + typeParameters.joinToString(", ") { it.toTypeScript(indent) } + ">"
+                else
+                    ""
+            "type $name$renderedTypeParameters = ${value.toTypeScript(indent)}"
+        }
+
         is ExportedFunction -> {
             val visibility = if (isProtected) "protected " else ""
 

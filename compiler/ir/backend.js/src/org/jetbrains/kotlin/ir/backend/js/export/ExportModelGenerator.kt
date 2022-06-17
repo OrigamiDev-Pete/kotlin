@@ -22,15 +22,13 @@ import org.jetbrains.kotlin.ir.symbols.IrClassifierSymbol
 import org.jetbrains.kotlin.ir.symbols.IrTypeParameterSymbol
 import org.jetbrains.kotlin.ir.types.*
 import org.jetbrains.kotlin.ir.util.*
+import org.jetbrains.kotlin.js.config.JSConfigurationKeys
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.serialization.js.ModuleKind
 import org.jetbrains.kotlin.utils.addIfNotNull
 import org.jetbrains.kotlin.utils.keysToMap
 
-class ExportModelGenerator(
-    val context: JsIrBackendContext,
-    val generateNamespacesForPackages: Boolean
-) {
+class ExportModelGenerator(val context: JsIrBackendContext, val generateNamespacesForPackages: Boolean) {
     fun generateExport(file: IrPackageFragment): List<ExportedDeclaration> {
         val namespaceFqName = file.fqName
         val exports = file.declarations.flatMap { declaration -> listOfNotNull(exportDeclaration(declaration)) }
@@ -52,7 +50,7 @@ class ExportModelGenerator(
 
     private fun exportDeclaration(declaration: IrDeclaration): ExportedDeclaration? {
         val candidate = getExportCandidate(declaration) ?: return null
-        if (!shouldDeclarationBeExported(candidate, context)) return null
+        if (!shouldDeclarationBeExportedImplicitlyOrExplicitly(candidate, context)) return null
 
         return when (candidate) {
             is IrSimpleFunction -> exportFunction(candidate)
@@ -69,9 +67,10 @@ class ExportModelGenerator(
         exportOrdinaryClass(candidate)
     }
 
+
     private fun exportFunction(function: IrSimpleFunction): ExportedDeclaration? {
         return when (val exportability = functionExportability(function)) {
-            is Exportability.NotNeeded -> null
+            is Exportability.NotNeeded, is Exportability.Implicit -> null
             is Exportability.Prohibited -> ErrorDeclaration(exportability.reason)
             is Exportability.Allowed -> {
                 val parent = function.parent
@@ -217,14 +216,51 @@ class ExportModelGenerator(
         return Exportability.Allowed
     }
 
-    private fun exportOrdinaryClass(
-        klass: IrClass
-    ): ExportedDeclaration? {
+    private fun exportDeclarationImplicitly(klass: IrClass): ExportedDeclaration {
+        val baseTypeAliasBody: ExportedType = ExportedType.InlineInterfaceType(
+            listOf(
+                ExportedProperty(
+                    name = "__thePropertyDoesntExist",
+                    type = ExportedType.Primitive.UniqueSymbol,
+                    mutable = false,
+                    isAbstract = false,
+                    isProtected = false,
+                    isField = true,
+                    irGetter = null,
+                    irSetter = null,
+                    exportedObject = null
+                )
+            )
+        )
+        val typeAliasBody = klass.superTypes.fold(baseTypeAliasBody) { acc, type ->
+            if (type !is IrSimpleType) return@fold acc
+            val nonNullType = type.makeNotNull() as IrSimpleType
+            val classifier = nonNullType.classifier
+            when {
+                nonNullType.isPrimitiveType() || nonNullType.isPrimitiveArray() -> acc
+                classifier is IrClassSymbol ->
+                    if (!classifier.owner.isExportedImplicitlyOrExplicitly(context)) {
+                        acc
+                    } else {
+                        ExportedType.IntersectionType(acc, exportType(type))
+                    }
+
+                else -> acc
+            }
+        }
+        return ExportedTypeAlias(
+            klass.name.identifier,
+            typeAliasBody,
+            klass.typeParameters.map(::exportTypeParameter),
+        )
+    }
+
+    private fun exportOrdinaryClass(klass: IrClass): ExportedDeclaration? {
         when (val exportability = classExportability(klass)) {
             is Exportability.Prohibited -> error(exportability.reason)
-            is Exportability.NotNeeded -> return null
-            Exportability.Allowed -> {
-            }
+            Exportability.NotNeeded -> return null
+            Exportability.Implicit -> return exportDeclarationImplicitly(klass)
+            Exportability.Allowed -> {}
         }
 
         val (members, nestedClasses) = exportClassDeclarations(klass)
@@ -241,9 +277,9 @@ class ExportModelGenerator(
     ): ExportedDeclaration? {
         when (val exportability = classExportability(klass)) {
             is Exportability.Prohibited -> error(exportability.reason)
-            is Exportability.NotNeeded -> return null
-            Exportability.Allowed -> {
-            }
+            Exportability.NotNeeded -> return null
+            Exportability.Implicit -> return exportDeclarationImplicitly(klass)
+            Exportability.Allowed -> {}
         }
 
         val enumEntries = klass
@@ -285,7 +321,7 @@ class ExportModelGenerator(
 
         for (declaration in klass.declarations) {
             val candidate = getExportCandidate(declaration) ?: continue
-            if (!shouldDeclarationBeExported(candidate, context)) continue
+            if (!shouldDeclarationBeExportedImplicitlyOrExplicitly(candidate, context)) continue
 
             val processingResult = specialProcessing(candidate)
             if (processingResult != null) {
@@ -503,7 +539,7 @@ class ExportModelGenerator(
 
             classifier is IrClassSymbol -> {
                 val klass = classifier.owner
-                val isExported = klass.isExported(context)
+                val isExported = klass.isExportedImplicitlyOrExplicitly(context)
                 val isImplicitlyExported = !isExported && !klass.isExternal
                 val isNonExportedExternal = klass.isExternal && !isExported
                 val name = klass.getFqNameWithJsNameWhenAvailable(!isNonExportedExternal && generateNamespacesForPackages).asString()
@@ -586,6 +622,7 @@ class ExportModelGenerator(
 sealed class Exportability {
     object Allowed : Exportability()
     object NotNeeded : Exportability()
+    object Implicit : Exportability()
     class Prohibited(val reason: String) : Exportability()
 }
 
@@ -624,6 +661,10 @@ private fun getExportCandidate(declaration: IrDeclaration): IrDeclarationWithNam
     }
 
     return declaration
+}
+
+private fun shouldDeclarationBeExportedImplicitlyOrExplicitly(declaration: IrDeclarationWithName, context: JsIrBackendContext): Boolean {
+   return declaration.isJsImplicitExport() || shouldDeclarationBeExported(declaration, context)
 }
 
 private fun shouldDeclarationBeExported(declaration: IrDeclarationWithName, context: JsIrBackendContext): Boolean {
@@ -677,6 +718,11 @@ fun IrOverridableDeclaration<*>.isOverriddenExported(context: JsIrBackendContext
 fun IrDeclaration.isExported(context: JsIrBackendContext): Boolean {
     val candidate = getExportCandidate(this) ?: return false
     return shouldDeclarationBeExported(candidate, context)
+}
+
+fun IrDeclaration.isExportedImplicitlyOrExplicitly(context: JsIrBackendContext): Boolean {
+    val candidate = getExportCandidate(this) ?: return false
+    return shouldDeclarationBeExportedImplicitlyOrExplicitly(candidate, context)
 }
 
 private fun DescriptorVisibility.toExportedVisibility() =
