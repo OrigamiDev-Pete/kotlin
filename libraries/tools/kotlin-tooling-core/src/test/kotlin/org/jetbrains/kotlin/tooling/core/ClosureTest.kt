@@ -7,6 +7,7 @@ package org.jetbrains.kotlin.tooling.core
 
 import org.junit.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertSame
 
 class ClosureTest {
 
@@ -83,6 +84,21 @@ class ClosureTest {
     }
 
     @Test
+    fun `closure with empty nodes`() {
+        assertSame(
+            emptySet(), Node("").closure { it.children },
+            "Expected no Set being allocated on empty closure"
+        )
+    }
+
+    @Test
+    fun `closure with only self reference`() {
+        val node = Node("a")
+        node.children.add(node)
+        assertEquals(emptySet(), node.closure { it.children })
+    }
+
+    @Test
     fun `closure on List`() {
         val a = Node("a")
         val b = Node("b")
@@ -92,19 +108,36 @@ class ClosureTest {
         val f = Node("f")
         val g = Node("g")
 
-        // a -> b, c -> d
+        // a -> (b, c)
+        // c -> (d)
         a.children.add(b)
         a.children.add(c)
         c.children.add(d)
 
-        // e -> f, g, a
+        // e -> (f, g, a)
         e.children.add(f)
         e.children.add(g)
         e.children.add(a) // <- cycle back to a!
 
         assertEquals(
-            listOf("b", "c", "d", "f", "g"), // <- a *is not* listed in closure!!!
+            listOf("b", "c", "f", "g", "d"), // <- a *is not* listed in closure!!!
             listOf(a, e).closure<Node> { it.children }.map { it.value }
+        )
+    }
+
+    @Test
+    fun `closure on empty list`() {
+        assertSame(
+            emptySet(), listOf<Node>().closure<Node> { it.children },
+            "Expected no Set being allocated on empty closure"
+        )
+    }
+
+    @Test
+    fun `closure - on list - no edges`() {
+        assertSame(
+            emptySet(), listOf(Node("a"), Node("b")).closure<Node> { it.children },
+            "Expected no Set being allocated on empty closure"
         )
     }
 
@@ -118,19 +151,35 @@ class ClosureTest {
         val f = Node("f")
         val g = Node("g")
 
-        // a -> b, c -> d
+        // a -> (b, c)
+        // c -> (d)
         a.children.add(b)
         a.children.add(c)
         c.children.add(d)
 
-        // e -> f, g, a
+        // e -> (f, g, a)
         e.children.add(f)
         e.children.add(g)
         e.children.add(a) // <- cycle back to a!
 
         assertEquals(
-            listOf("a", "e", "b", "c", "d", "f", "g"),
+            listOf("a", "e", "b", "c", "f", "g", "d"),
             listOf(a, e).withClosure<Node> { it.children }.map { it.value }
+        )
+    }
+
+    @Test
+    fun `withClosure on emptyList`() {
+        assertSame(
+            emptySet(), listOf<Node>().withClosure<Node> { it.children },
+            "Expected no Set being allocated on empty closure"
+        )
+    }
+
+    @Test
+    fun `withClosure with no further nodes`() {
+        assertEquals(
+            listOf("a", "b"), listOf(Node("a"), Node("b")).withClosure<Node> { it.children }.map { it.value }
         )
     }
 
@@ -149,6 +198,14 @@ class ClosureTest {
     }
 
     @Test
+    fun `linearClosure on empty`() {
+        assertSame(
+            emptySet(), Node("").linearClosure { it.parent },
+            "Expected no Set being allocated on empty linearClosure"
+        )
+    }
+
+    @Test
     fun withLinearClosure() {
         val a = Node("a")
         val b = Node("b")
@@ -159,6 +216,13 @@ class ClosureTest {
 
         assertEquals(
             listOf("c", "b", "a"), c.withLinearClosure { it.parent }.map { it.value },
+        )
+    }
+
+    @Test
+    fun `withLinearClosure on empty`() {
+        assertEquals(
+            listOf("a"), Node("a").withLinearClosure { it.parent }.map { it.value },
         )
     }
 }
