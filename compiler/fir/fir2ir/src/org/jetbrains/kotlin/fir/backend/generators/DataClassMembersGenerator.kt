@@ -6,6 +6,7 @@
 package org.jetbrains.kotlin.fir.backend.generators
 
 import org.jetbrains.kotlin.builtins.StandardNames.HASHCODE_NAME
+import org.jetbrains.kotlin.config.LanguageFeature
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.fir.backend.Fir2IrComponents
 import org.jetbrains.kotlin.fir.backend.FirMetadataSource
@@ -19,6 +20,7 @@ import org.jetbrains.kotlin.fir.declarations.builder.buildSimpleFunction
 import org.jetbrains.kotlin.fir.declarations.builder.buildValueParameter
 import org.jetbrains.kotlin.fir.declarations.impl.FirDeclarationStatusImpl
 import org.jetbrains.kotlin.fir.declarations.utils.modality
+import org.jetbrains.kotlin.fir.languageVersionSettings
 import org.jetbrains.kotlin.fir.moduleData
 import org.jetbrains.kotlin.fir.scopes.unsubstitutedScope
 import org.jetbrains.kotlin.fir.symbols.ConeClassLikeLookupTag
@@ -69,6 +71,9 @@ class DataClassMembersGenerator(val components: Fir2IrComponents) : Fir2IrCompon
 
     fun generateDataClassMembers(klass: FirClass, irClass: IrClass): List<FirDeclaration> =
         MyDataClassMethodsGenerator(irClass, klass.symbol.toLookupTag(), IrDeclarationOrigin.GENERATED_DATA_CLASS_MEMBER).generate(klass)
+
+    fun generateObjectToString(klass: FirClass, irClass: IrClass): List<FirDeclaration> =
+        MyDataClassMethodsGenerator(irClass, klass.symbol.toLookupTag(), IrDeclarationOrigin.OBJECT_TO_STRING).generate(klass)
 
     fun generateDataClassComponentBody(irFunction: IrFunction, lookupTag: ConeClassLikeLookupTag) =
         MyDataClassMethodsGenerator(irFunction.parentAsClass, lookupTag, IrDeclarationOrigin.GENERATED_DATA_CLASS_MEMBER)
@@ -183,7 +188,7 @@ class DataClassMembersGenerator(val components: Fir2IrComponents) : Fir2IrCompon
         fun generate(klass: FirClass): List<FirDeclaration> {
             val propertyParametersCount = irClass.primaryConstructor?.explicitParameters?.size ?: 0
             val properties = irClass.properties.filter { it.backingField != null }.take(propertyParametersCount).toList()
-            if (properties.isEmpty()) {
+            if (properties.isEmpty() && !(klass.classKind == ClassKind.OBJECT || session.languageVersionSettings.supportsFeature(LanguageFeature.PrettyToStringForObjects))) {
                 return emptyList()
             }
 
@@ -215,27 +220,29 @@ class DataClassMembersGenerator(val components: Fir2IrComponents) : Fir2IrCompon
                     }
                 }
 
-            val equalsContributedFunction = contributedFunctionsInSupertypes[EQUALS]
-            if (equalsContributedFunction != null) {
-                result.add(equalsContributedFunction)
-                val equalsFunction = createSyntheticIrFunction(
-                    EQUALS,
-                    components.irBuiltIns.booleanType,
-                    otherParameterNeeded = true
-                )
-                irDataClassMembersGenerator.generateEqualsMethod(equalsFunction, properties)
-                irClass.declarations.add(equalsFunction)
-            }
+            if (properties.isNotEmpty()) {
+                val equalsContributedFunction = contributedFunctionsInSupertypes[EQUALS]
+                if (equalsContributedFunction != null) {
+                    result.add(equalsContributedFunction)
+                    val equalsFunction = createSyntheticIrFunction(
+                        EQUALS,
+                        components.irBuiltIns.booleanType,
+                        otherParameterNeeded = true
+                    )
+                    irDataClassMembersGenerator.generateEqualsMethod(equalsFunction, properties)
+                    irClass.declarations.add(equalsFunction)
+                }
 
-            val hashcodeNameContributedFunction = contributedFunctionsInSupertypes[HASHCODE_NAME]
-            if (hashcodeNameContributedFunction != null) {
-                result.add(hashcodeNameContributedFunction)
-                val hashCodeFunction = createSyntheticIrFunction(
-                    HASHCODE_NAME,
-                    components.irBuiltIns.intType,
-                )
-                irDataClassMembersGenerator.generateHashCodeMethod(hashCodeFunction, properties)
-                irClass.declarations.add(hashCodeFunction)
+                val hashcodeNameContributedFunction = contributedFunctionsInSupertypes[HASHCODE_NAME]
+                if (hashcodeNameContributedFunction != null) {
+                    result.add(hashcodeNameContributedFunction)
+                    val hashCodeFunction = createSyntheticIrFunction(
+                        HASHCODE_NAME,
+                        components.irBuiltIns.intType,
+                    )
+                    irDataClassMembersGenerator.generateHashCodeMethod(hashCodeFunction, properties)
+                    irClass.declarations.add(hashCodeFunction)
+                }
             }
 
             val toStringContributedFunction = contributedFunctionsInSupertypes[TO_STRING]
