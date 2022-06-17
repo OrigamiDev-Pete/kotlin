@@ -79,8 +79,10 @@ fun box(): String {
     val e = E()
     if (e.result != "OK") return e.foo
 
-    val f = F()
-    if (f.result != "OK") return f.foo
+    try {
+        val f = F()
+        return "Failed: it should not work for now, because of delegating objects initialization order"
+    } catch (e: Throwable) {}
 
     val g = G(e)
     if (g.result != "OK") return g.foo
