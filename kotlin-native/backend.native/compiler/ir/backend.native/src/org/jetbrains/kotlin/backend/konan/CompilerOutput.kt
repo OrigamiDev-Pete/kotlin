@@ -99,8 +99,15 @@ private fun collectLlvmModules(context: Context, generatedBitcodeFiles: List<Str
 
     val nativeLibraries = config.nativeLibraries + launcherNativeLibraries
 
-    val bitcodePartOfStdlib = context.llvm.bitcodeToLink.singleOrNull { it.isStdlib }?.bitcodePaths?.filter { it.isBitcode } ?: emptyList()
-    val bitcodeLibraries = context.llvm.bitcodeToLink.map { it.bitcodePaths }.flatten().filter { it.isBitcode } - bitcodePartOfStdlib
+    val bitcodePartOfStdlib = context.llvm.bitcodeToLink
+            .singleOrNull { it.isStdlib }
+            ?.bitcodePaths
+            ?.filter { it.isBitcode }
+            ?: emptyList()
+    val bitcodeLibraries = context.llvm.bitcodeToLink
+            .map { it.bitcodePaths }
+            .flatten()
+            .filter { it.isBitcode } - bitcodePartOfStdlib
 
     val additionalBitcodeFilesToLink = context.llvm.additionalProducedBitcodeFiles
     val exceptionsSupportNativeLibrary = listOf(config.exceptionsSupportNativeLibrary)
@@ -112,18 +119,22 @@ private fun collectLlvmModules(context: Context, generatedBitcodeFiles: List<Str
             exceptionsSupportNativeLibrary
 
     return listOf((runtimeNativeLibraries + bitcodePartOfStdlib), additionalBitcodeFiles).map {
-        it.map {
-            parseBitcodeFile(it).also { parsedModule ->
+        it.map { bitcodeFile ->
+            parseBitcodeFile(bitcodeFile).also { parsedModule ->
                 if (!context.shouldUseDebugInfoFromNativeLibs()) {
                     LLVMStripModuleDebugInfo(parsedModule)
                 }
             }
         }
     }.let { (runtimeModules, additionalModules) ->
-        LlvmModules(
-                runtimeModules + context.generateRuntimeConstantsModule() + objcRuntimeModule,
-                additionalModules
-        )
+        if (context.producedLlvmModuleContainsStdlib) {
+            LlvmModules(
+                    runtimeModules + context.generateRuntimeConstantsModule() + objcRuntimeModule,
+                    additionalModules
+            )
+        } else {
+            LlvmModules(emptyList(), additionalModules)
+        }
     }
 }
 
