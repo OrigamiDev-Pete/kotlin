@@ -109,8 +109,18 @@ object StandaloneProjectFactory {
         val javaFileManager = project.getService(JavaFileManager::class.java) as KotlinCliJavaFileManagerImpl
         val javaModuleFinder = CliJavaModuleFinder(jdkHome?.toFile(), null, javaFileManager, project, null)
 
+        val rootsIndex = JvmDependenciesIndexImpl(roots)
+        rootsIndex.indexedRoots.forEach {
+            if (it.file.isDirectory) {
+                // NB: In [JavaCoreProjectEnvironment#addSourcesToClasspath],
+                //   [CorePackageIndex] is populated, which will be used to lookup directories by package name.
+                // Then, [PsiElementFinder#processPackageDirectories] uses such directories to populate package info,
+                //   e.g., package-level annotations declared in package-info.java
+                environment.addSourcesToClasspath(it.file)
+            }
+        }
         javaFileManager.initialize(
-            JvmDependenciesIndexImpl(roots),
+            rootsIndex,
             listOf(
                 createPackagePartsProvider(project, libraryRoots, languageVersionSettings)
                     .invoke(ProjectScope.getLibrariesScope(project))
@@ -124,7 +134,7 @@ object StandaloneProjectFactory {
             CliJavaModuleResolver(JavaModuleGraph(javaModuleFinder), emptyList(), javaModuleFinder.systemModules.toList(), project)
         )
 
-        val finderFactory = CliVirtualFileFinderFactory(JvmDependenciesIndexImpl(roots), false)
+        val finderFactory = CliVirtualFileFinderFactory(rootsIndex, false)
 
         project.registerService(MetadataFinderFactory::class.java, finderFactory)
         project.registerService(VirtualFileFinderFactory::class.java, finderFactory)
