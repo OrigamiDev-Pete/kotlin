@@ -9,25 +9,25 @@ import kotlin.experimental.ExperimentalTypeInference
 fun <K> id(x: K): K = x
 
 @OptIn(ExperimentalTypeInference::class)
-fun <K, V> build(@BuilderInference builderAction: MutableMap<K, V>.() -> V) {}
+fun <K, V> build(builderAction: MutableMap<K, V>.() -> V) {}
 
 @OptIn(ExperimentalTypeInference::class)
-fun <K, V> build2(@BuilderInference builderAction: MutableMap<K, V>.() -> K) {}
+fun <K, V> build2(builderAction: MutableMap<K, V>.() -> K) {}
 
 @OptIn(ExperimentalTypeInference::class)
-fun <K, V> build3(@BuilderInference builderAction: MutableMap<K, V>.(K) -> Unit) {}
+fun <K, V> build3(builderAction: MutableMap<K, V>.(K) -> Unit) {}
 
 @OptIn(ExperimentalTypeInference::class)
-fun <K, V> build4(@BuilderInference builderAction: MutableMap<K, V>.() -> MutableMap<String, Int>) {}
+fun <K, V> build4(builderAction: MutableMap<K, V>.() -> MutableMap<String, Int>) {}
 
 @OptIn(ExperimentalTypeInference::class)
-fun <K : V, V : CharSequence> build5(@BuilderInference builderAction: MutableMap<K, V>.() -> MutableMap<String, V>) {}
+fun <K : V, V : CharSequence> build5(builderAction: MutableMap<K, V>.() -> MutableMap<String, V>) {}
 
 @OptIn(ExperimentalTypeInference::class)
-fun <K : V, V : CharSequence> build6(@BuilderInference builderAction: MutableMap<K, V>.() -> MutableMap<K, String>) {}
+fun <K : V, V : CharSequence> build6(builderAction: MutableMap<K, V>.() -> MutableMap<K, String>) {}
 
 @OptIn(ExperimentalTypeInference::class)
-fun <K : V, V : CharSequence> build7(@BuilderInference builderAction: MutableMap<K, V>.() -> MutableMap<String, V>) = mutableMapOf<String, V>()
+fun <K : V, V : CharSequence> build7(builderAction: MutableMap<K, V>.() -> MutableMap<String, V>) = mutableMapOf<String, V>()
 
 @ExperimentalStdlibApi
 fun box(): String {
